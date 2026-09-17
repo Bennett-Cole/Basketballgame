@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rucker Park - Full Outdoor Street Court</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; user-select: none; background-color: #030712; }
+        #canvas-container { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body class="text-white">
+
+    <div id="canvas-container"></div>
+
+    <!-- HUD Overlay -->
+    <div class="absolute top-6 left-6 pointer-events-none flex items-center space-x-4">
+        <div class="bg-black/80 backdrop-blur-md p-4 rounded-xl border border-yellow-500/30 shadow-2xl">
+            <h1 class="text-xl font-black italic tracking-widest text-yellow-400">RUCKER PARK <span class="text-xs text-green-400 font-normal">NYC FULL PARK EDITION</span></h1>
+            <p class="text-xs text-gray-300 mt-1">PLAYER: <span class="font-bold text-white">BLOCKY BALLER (6'0")</span> | HOOP: <span class="font-bold text-yellow-400">12'0" (+6 FT)</span></p>
+            <p class="text-xs text-gray-300 mt-0.5">CURRENT DISTANCE: <span id="live-distance" class="font-bold text-yellow-400">0.0 FT</span></p>
+            <p class="text-xs text-gray-300 mt-0.5">AI OPPONENT: <span id="ai-status" class="font-bold text-red-400">DEFENDING</span></p>
+            
+            <!-- Stamina Bar UI -->
+            <div class="mt-3">
+                <div class="flex justify-between text-[10px] font-bold text-gray-400 mb-1">
+                    <span>DRIBBLE STAMINA</span>
+                    <span id="stamina-text" class="text-cyan-400">100%</span>
+                </div>
+                <div class="w-48 h-2.5 bg-gray-800 rounded-full border border-white/10 overflow-hidden p-0.5">
+                    <div id="stamina-bar" class="h-full bg-cyan-400 rounded-full transition-all duration-75 w-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Counter (Head-to-Head Player vs AI) -->
+    <div class="absolute top-6 right-6 pointer-events-none bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl border border-green-500/30 shadow-2xl flex items-center space-x-6 text-center">
+        <div>
+            <p class="text-[10px] text-cyan-400 font-bold uppercase tracking-widest">PLAYER</p>
+            <p id="player-score" class="text-3xl font-black text-yellow-400">0</p>
+        </div>
+        <div class="text-xl font-black text-gray-500">:</div>
+        <div>
+            <p class="text-[10px] text-red-400 font-bold uppercase tracking-widest">AI</p>
+            <p id="ai-score" class="text-3xl font-black text-red-400">0</p>
+        </div>
+    </div>
+
+    <!-- Feedback Banner -->
+    <div id="feedback-banner" class="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none hidden flex-col items-center justify-center font-black text-2xl tracking-wider px-6 py-2 rounded-lg border shadow-2xl transition-all duration-200 text-center z-20">
+        <div id="feedback-text">EXCELLENT RELEASE!</div>
+        <div id="feedback-distance" class="text-xs font-bold tracking-normal opacity-90 mt-0.5">Shot Distance: 15.2 ft</div>
+    </div>
+
+    <!-- Controls Overlay (Clickable to Hide) -->
+    <div id="controls-overlay" onclick="this.style.display='none'" class="absolute bottom-6 left-6 cursor-pointer bg-black/80 hover:bg-black/90 backdrop-blur-md p-4 rounded-lg border border-white/10 text-xs text-gray-300 space-y-1.5 transition-all shadow-xl group z-10">
+        <div class="text-[10px] text-yellow-400/70 font-bold uppercase tracking-wider mb-1 group-hover:text-yellow-400 flex justify-between items-center">
+            <span>Controls</span>
+            <span class="text-[9px] text-gray-400 italic">(Click anywhere on this box to dismiss)</span>
+        </div>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">WASD</span> Move Player Around Court (Drains Stamina)</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">ARROW UP</span> Front Crossover</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">ARROW DOWN</span> Step-Back Move</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">ARROW LEFT</span> Between-The-Legs Crossover</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">ARROW RIGHT</span> Behind-The-Back Crossover</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">P</span> Spawn New Ball In Hand</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">R</span> Reset Position & Retrieve Ball</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">HOLD Q</span> Charge Dunk Meter (Release in GREEN! Further = Harder)</p>
+        <p><span class="bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">HOLD SPACE</span> Offense: Charge Shot | Defense: Jump Block/Contest</p>
+    </div>
+
+    <!-- Shot / Dunk Meter -->
+    <div id="shot-meter-container" class="absolute hidden flex-col items-center pointer-events-none -translate-x-1/2 -translate-y-full z-20">
+        <div class="w-5 h-28 bg-black/90 border border-white/40 rounded-full p-0.5 overflow-hidden shadow-2xl relative flex flex-col justify-end">
+            <div id="green-zone" class="absolute left-0 right-0 bg-green-500/90 z-10 shadow-[0_0_12px_#22c55e] border-y border-green-300"></div>
+            <div id="shot-meter-bar" class="w-full bg-yellow-400 h-0 rounded-full transition-none"></div>
+        </div>
+        <span id="meter-label" class="text-[9px] font-black tracking-widest text-yellow-400 mt-1 uppercase">RELEASE</span>
+    </div>
+
+    <script>
+        // --- CONSTANTS & SCALE CALCULATIONS ---
+        const UNITS_TO_FEET = 3.28;
+        
+        // Player height calculation: player mesh spans y=0.0 to top of cap at ~1.83 units (6.0 feet)
+        const PLAYER_HEIGHT_UNITS = 1.83; 
+        const HOOP_HEIGHT_OFFSET_FT = 6.0; // Hoop is 6 ft taller than player (12.0 ft rim total)
+        const HOOP_HEIGHT_OFFSET_UNITS = HOOP_HEIGHT_OFFSET_FT / UNITS_TO_FEET; // ~1.83 units
+        
+        // Target Rim Y-Height = 1.83 + 1.83 = 3.66 units (12.0 ft)
+        const TARGET_RIM_Y = PLAYER_HEIGHT_UNITS + HOOP_HEIGHT_OFFSET_UNITS;
+
+        // --- 1. REALISTIC RUCKER PARK ASPHALT COURT TEXTURE ---
+        function createRuckerParkCourtTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 2048;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#2f4336';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#83282b';
+            ctx.fillRect(724, 40, 600, 960);
+
+            ctx.fillRect(0, 0, canvas.width, 40);
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+            ctx.fillRect(0, 0, 40, canvas.height);
+            ctx.fillRect(canvas.width - 40, 0, 40, canvas.height);
+
+            for (let i = 0; i < 40000; i++) {
+                const nx = Math.random() * canvas.width;
+                const ny = Math.random() * canvas.height;
+                const alpha = Math.random() * 0.08;
+                ctx.fillStyle = Math.random() > 0.5 ? `rgba(255, 255, 255, ${alpha})` : `rgba(0, 0, 0, ${alpha})`;
+                ctx.fillRect(nx, ny, 2, 2);
+            }
+
+            ctx.strokeStyle = 'rgba(240, 240, 240, 0.9)';
+            ctx.lineWidth = 14;
+            ctx.strokeRect(40, 40, canvas.width - 80, canvas.height - 80);
+            ctx.strokeRect(724, 40, 600, 960);
+
+            ctx.beginPath();
+            ctx.arc(1024, 1000, 300, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(1024, 240, 780, Math.PI * 0.12, Math.PI * 0.88);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(244, 40);
+            ctx.lineTo(244, 480);
+            ctx.moveTo(1804, 40);
+            ctx.lineTo(1804, 480);
+            ctx.stroke();
+
+            ctx.save();
+            ctx.font = '900 110px sans-serif';
+            ctx.fillStyle = 'rgba(240, 240, 240, 0.95)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.translate(1024, 1600);
+            ctx.rotate(Math.PI);
+            ctx.fillText('RUCKER PARK', 0, 0);
+            ctx.restore();
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.anisotropy = 16;
+            return texture;
+        }
+
+        function createAsphaltNormalMap() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgb(128,128,255)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < 20000; i++) {
+                ctx.fillStyle = `rgb(${120 + Math.random() * 16}, ${120 + Math.random() * 16}, 255)`;
+                ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2);
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // --- 2. SETUP SCENE & LIGHTING ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.FogExp2(0x87ceeb, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.01;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.8);
+        sunLight.position.set(20, 35, 25);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 120;
+        sunLight.shadow.camera.left = -30;
+        sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30;
+        sunLight.shadow.camera.bottom = -30;
+        scene.add(sunLight);
+
+        // --- 3. ENVIRONMENT ---
+        const roomWidth = 24, roomLength = 28;
+
+        const groundGeo = new THREE.PlaneGeometry(160, 160);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.01;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const courtGeo = new THREE.PlaneGeometry(roomWidth, roomLength);
+        const courtMat = new THREE.MeshStandardMaterial({ 
+            map: createRuckerParkCourtTexture(), 
+            normalMap: createAsphaltNormalMap(),
+            roughness: 0.85, 
+            metalness: 0.05 
+        });
+        const court = new THREE.Mesh(courtGeo, courtMat);
+        court.rotation.x = -Math.PI / 2;
+        court.receiveShadow = true;
+        scene.add(court);
+
+        // FENCE
+        const fenceGroup = new THREE.Group();
+        const fenceHeight = 4.5;
+        const chainMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8, roughness: 0.3, wireframe: true, side: THREE.DoubleSide });
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.4 });
+
+        function createFenceWall(x, z, width, rotationY) {
+            const wallGroup = new THREE.Group();
+            const fenceMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, fenceHeight, Math.floor(width * 2), 8), chainMat);
+            fenceMesh.position.set(0, fenceHeight / 2, 0);
+            wallGroup.add(fenceMesh);
+
+            const postCount = Math.floor(width / 3.5);
+            for (let i = 0; i <= postCount; i++) {
+                const px = -width / 2 + (i * (width / postCount));
+                const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, fenceHeight, 12), postMat);
+                post.position.set(px, fenceHeight / 2, 0);
+                post.castShadow = true;
+                wallGroup.add(post);
+            }
+
+            const topRail = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, width, 12), postMat);
+            topRail.rotation.z = Math.PI / 2;
+            topRail.position.set(0, fenceHeight, 0);
+            wallGroup.add(topRail);
+
+            wallGroup.position.set(x, 0, z);
+            wallGroup.rotation.y = rotationY;
+            return wallGroup;
+        }
+
+        const fMargin = 1.0;
+        fenceGroup.add(createFenceWall(0, -roomLength / 2 - fMargin, roomWidth + fMargin * 2, 0)); 
+        fenceGroup.add(createFenceWall(0, roomLength / 2 + fMargin, roomWidth + fMargin * 2, Math.PI)); 
+        fenceGroup.add(createFenceWall(-roomWidth / 2 - fMargin, 0, roomLength + fMargin * 2, Math.PI / 2)); 
+        fenceGroup.add(createFenceWall(roomWidth / 2 + fMargin, 0, roomLength + fMargin * 2, -Math.PI / 2)); 
+        scene.add(fenceGroup);
+
+        // TREES
+        const treeGroup = new THREE.Group();
+        const barkMat = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.9 });
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
+        const leafMatDark = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8 });
+
+        function buildTree(x, z, scale = 1.0) {
+            const singleTree = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3 * scale, 0.5 * scale, 7 * scale, 8), barkMat);
+            trunk.position.y = 3.5 * scale;
+            trunk.castShadow = true;
+            singleTree.add(trunk);
+
+            for (let b = 0; b < 3; b++) {
+                const mat = b % 2 === 0 ? leafMat : leafMatDark;
+                const foliage = new THREE.Mesh(new THREE.DodecahedronGeometry((2.8 - b * 0.5) * scale, 1), mat);
+                foliage.position.y = (6.5 + b * 1.8) * scale;
+                foliage.castShadow = true;
+                singleTree.add(foliage);
+            }
+            singleTree.position.set(x, 0, z);
+            return singleTree;
+        }
+
+        const treePositions = [
+            [-18, -18], [-22, -10], [-20, 0], [-24, 12], [-18, 20],
+            [18, -18], [22, -8], [20, 2], [24, 14], [18, 22],
+            [-10, -22], [0, -24], [10, -22], [-12, 24], [12, 24]
+        ];
+        treePositions.forEach(pos => {
+            treeGroup.add(buildTree(pos[0], pos[1], 0.85 + Math.random() * 0.4));
+        });
+        scene.add(treeGroup);
+
+        // BUILDINGS & BRIDGE
+        const buildingMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9 });
+        for (let i = -4; i <= 4; i++) {
+            if (i === 0) continue;
+            const bWidth = 10 + Math.random() * 4;
+            const bHeight = 20 + Math.random() * 15;
+            const building = new THREE.Mesh(new THREE.BoxGeometry(bWidth, bHeight, 10), buildingMat);
+            building.position.set(i * 15, bHeight / 2, -45);
+            scene.add(building);
+        }
+
+        const trestleGroup = new THREE.Group();
+        trestleGroup.position.set(0, 0, -28);
+        const metalMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, metalness: 0.5 });
+        const rustMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.9 });
+
+        for (let x = -40; x <= 40; x += 16) {
+            const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 14, 1.4), metalMat);
+            pillar.position.set(x, 7, 0);
+            pillar.castShadow = true;
+            trestleGroup.add(pillar);
+        }
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(100, 2.5, 7), rustMat);
+        deck.position.set(0, 14, 0);
+        deck.castShadow = true;
+        trestleGroup.add(deck);
+        scene.add(trestleGroup);
+
+        // ROADS & CARS
+        const roadGroup = new THREE.Group();
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+        
+        const backRoad = new THREE.Mesh(new THREE.PlaneGeometry(160, 10), roadMat);
+        backRoad.rotation.x = -Math.PI / 2;
+        backRoad.position.set(0, 0.02, -20);
+        roadGroup.add(backRoad);
+
+        const sideRoad = new THREE.Mesh(new THREE.PlaneGeometry(10, 160), roadMat);
+        sideRoad.rotation.x = -Math.PI / 2;
+        sideRoad.position.set(28, 0.02, 0);
+        roadGroup.add(sideRoad);
+        scene.add(roadGroup);
+
+        const cars = [];
+        const carColors = [0xef4444, 0x3b82f6, 0xf59e0b, 0x10b981, 0x6b7280, 0xffffff, 0x111827];
+
+        function createCar(colorHex) {
+            const car = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3, metalness: 0.4 });
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1 });
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 });
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.1, 1.7), bodyMat);
+            body.position.y = 0.75;
+            body.castShadow = true;
+            car.add(body);
+
+            const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 1.5), glassMat);
+            cabin.position.set(-0.2, 1.5, 0);
+            cabin.castShadow = true;
+            car.add(cabin);
+
+            const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+            const wPos = [[-1.1, 0.35, 0.85], [1.1, 0.35, 0.85], [-1.1, 0.35, -0.85], [1.1, 0.35, -0.85]];
+            wPos.forEach(p => {
+                const w = new THREE.Mesh(wheelGeo, wheelMat);
+                w.rotation.x = Math.PI / 2;
+                w.position.set(p[0], p[1], p[2]);
+                car.add(w);
+            });
+
+            return car;
+        }
+
+        for (let i = 0; i < 6; i++) {
+            const car = createCar(carColors[i % carColors.length]);
+            const isBackRoad = i < 3;
+            if (isBackRoad) {
+                car.position.set(-60 + i * 40, 0, -20);
+                car.userData = { speed: 12 + Math.random() * 6, dir: 1, axis: 'x', limitMin: -70, limitMax: 70 };
+            } else {
+                car.rotation.y = Math.PI / 2;
+                car.position.set(28, 0, -60 + (i - 3) * 40);
+                car.userData = { speed: 10 + Math.random() * 6, dir: 1, axis: 'z', limitMin: -70, limitMax: 70 };
+            }
+            cars.push(car);
+            scene.add(car);
+        }
+
+        // SPECTATORS
+        const spectators = [];
+        const spectatorSkin = [0xa16207, 0x854d0e, 0x713f12, 0xd97706, 0xf59e0b];
+        const spectatorClothes = [0xd97706, 0x2563eb, 0xdc2626, 0x16a34a, 0x9333ea, 0x475569];
+
+        function createSpectator() {
+            const person = new THREE.Group();
+            const sSkinMat = new THREE.MeshStandardMaterial({ color: spectatorSkin[Math.floor(Math.random() * spectatorSkin.length)], roughness: 0.8 });
+            const sShirtMat = new THREE.MeshStandardMaterial({ color: spectatorClothes[Math.floor(Math.random() * spectatorClothes.length)], roughness: 0.7 });
+            const sPantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.6, 0.3), sShirtMat);
+            torso.position.y = 1.0;
+            torso.castShadow = true;
+            person.add(torso);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), sSkinMat);
+            head.position.y = 1.5;
+            head.castShadow = true;
+            person.add(head);
+
+            const legs = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.7, 0.25), sPantsMat);
+            legs.position.y = 0.35;
+            legs.castShadow = true;
+            person.add(legs);
+
+            person.userData = { animOffset: Math.random() * Math.PI * 2 };
+            return person;
+        }
+
+        const specPositions = [
+            [-13.5, 5], [-13.5, 0], [-13.5, -5], [-13.5, -10],
+            [13.5, 8], [13.5, 2], [13.5, -4], [13.5, -9],
+            [-6, 15], [0, 15], [6, 15]
+        ];
+
+        specPositions.forEach(p => {
+            const spec = createSpectator();
+            spec.position.set(p[0], 0, p[1]);
+            spec.lookAt(0, 1.0, p[1] > 12 ? 0 : p[1]);
+            spectators.push(spec);
+            scene.add(spec);
+        });
+
+        // --- 4. HOOP (Scaled exactly to Player Height + 6 Feet = 3.66 units) ---
+        const hoopGroup = new THREE.Group();
+        const hoopZ = -9.5;
+        hoopGroup.position.set(0, 0, hoopZ);
+
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6, metalness: 0.4 });
+
+        // Pole scaled up to reach higher extension height
+        const mainPole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, TARGET_RIM_Y + 1.15, 16), poleMat);
+        mainPole.position.set(0, (TARGET_RIM_Y + 1.15) / 2, -0.8);
+        mainPole.castShadow = true;
+        hoopGroup.add(mainPole);
+
+        const extensionArm = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 16), poleMat);
+        extensionArm.rotation.x = Math.PI / 3;
+        extensionArm.position.set(0, TARGET_RIM_Y + 0.35, -0.4);
+        hoopGroup.add(extensionArm);
+
+        const backboardMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+        const backboard = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.3, 0.08), backboardMat);
+        backboard.position.set(0, TARGET_RIM_Y + 0.15, 0.0);
+        backboard.castShadow = true;
+        hoopGroup.add(backboard);
+
+        const innerBox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.09), new THREE.MeshStandardMaterial({ color: 0xd97706 }));
+        innerBox.position.set(0, TARGET_RIM_Y, 0.01);
+        hoopGroup.add(innerBox);
+
+        const rimRadius = 0.42; 
+        const rimTubeRadius = 0.035;
+        const rimMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4, metalness: 0.3 });
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(rimRadius, rimTubeRadius, 16, 32), rimMat);
+        rim.rotation.x = Math.PI / 2;
+        rim.position.set(0, TARGET_RIM_Y, 0.5);
+        rim.castShadow = true;
+        hoopGroup.add(rim);
+
+        const netGroup = new THREE.Group();
+        netGroup.position.set(0, TARGET_RIM_Y, 0.5);
+        const whiteNetMat = new THREE.MeshStandardMaterial({ color: 0xffffff, wireframe: true, roughness: 0.5 });
+        const netGeo = new THREE.CylinderGeometry(rimRadius, rimRadius * 0.6, 0.65, 12, 8, true);
+        const netMesh = new THREE.Mesh(netGeo, whiteNetMat);
+        netMesh.position.y = -0.325;
+        netGroup.add(netMesh);
+        hoopGroup.add(netGroup);
+
+        scene.add(hoopGroup);
+
+        const hoopTargetPos = new THREE.Vector3(0, TARGET_RIM_Y, hoopZ + 0.5);
+
+        // HELPER FOR BLOCKY LIMBS
+        function createBlockyLimb(w, h, d, mat) {
+            const group = new THREE.Group();
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+            mesh.position.y = -h / 2;
+            mesh.castShadow = true;
+            group.add(mesh);
+            return { group, mesh };
+        }
+
+        // --- 5. BLOCKY PLAYER CHARACTER ---
+        const player = new THREE.Group();
+
+        const jerseyMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6 });
+        const shortsMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.6 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xa16207, roughness: 0.8 });
+        const shoeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2 });
+        const capMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
+
+        const pelvis = new THREE.Group();
+        pelvis.position.y = 0.85;
+        player.add(pelvis);
+
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.42), jerseyMat);
+        torso.position.y = 0.325;
+        torso.castShadow = true;
+        pelvis.add(torso);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 0.85;
+        pelvis.add(headGroup);
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), skinMat);
+        head.castShadow = true;
+        headGroup.add(head);
+
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.12, 0.40), capMat);
+        cap.position.y = 0.18;
+        headGroup.add(cap);
+
+        const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.03, 0.22), capMat);
+        capBrim.position.set(0, 0.14, -0.28);
+        headGroup.add(capBrim);
+
+        const leftShoulder = new THREE.Group();
+        leftShoulder.position.set(-0.44, 0.55, 0);
+        pelvis.add(leftShoulder);
+        const leftUpperArm = createBlockyLimb(0.20, 0.32, 0.20, jerseyMat);
+        leftShoulder.add(leftUpperArm.group);
+
+        const leftElbow = new THREE.Group();
+        leftElbow.position.y = -0.32;
+        leftUpperArm.group.add(leftElbow);
+        const leftForearm = createBlockyLimb(0.18, 0.30, 0.18, skinMat);
+        leftElbow.add(leftForearm.group);
+
+        const rightShoulder = new THREE.Group();
+        rightShoulder.position.set(0.44, 0.55, 0);
+        pelvis.add(rightShoulder);
+        const rightUpperArm = createBlockyLimb(0.20, 0.32, 0.20, jerseyMat);
+        rightShoulder.add(rightUpperArm.group);
+
+        const rightElbow = new THREE.Group();
+        rightElbow.position.y = -0.32;
+        rightUpperArm.group.add(rightElbow);
+        const rightForearm = createBlockyLimb(0.18, 0.30, 0.18, skinMat);
+        rightElbow.add(rightForearm.group);
+
+        const leftHip = new THREE.Group();
+        leftHip.position.set(-0.20, 0.0, 0);
+        pelvis.add(leftHip);
+        const leftThigh = createBlockyLimb(0.22, 0.35, 0.22, shortsMat);
+        leftHip.add(leftThigh.group);
+
+        const leftKnee = new THREE.Group();
+        leftKnee.position.y = -0.35;
+        leftThigh.group.add(leftKnee);
+        const leftShin = createBlockyLimb(0.20, 0.35, 0.20, skinMat);
+        leftKnee.add(leftShin.group);
+
+        const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.32), shoeMat);
+        leftShoe.position.set(0, -0.42, 0.05);
+        leftShoe.castShadow = true;
+        leftKnee.add(leftShoe);
+
+        const rightHip = new THREE.Group();
+        rightHip.position.set(0.20, 0.0, 0);
+        pelvis.add(rightHip);
+        const rightThigh = createBlockyLimb(0.22, 0.35, 0.22, shortsMat);
+        rightHip.add(rightThigh.group);
+
+        const rightKnee = new THREE.Group();
+        rightKnee.position.y = -0.35;
+        rightThigh.group.add(rightKnee);
+        const rightShin = createBlockyLimb(0.20, 0.35, 0.20, skinMat);
+        rightKnee.add(rightShin.group);
+
+        const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.32), shoeMat);
+        rightShoe.position.set(0, -0.42, 0.05);
+        rightShoe.castShadow = true;
+        rightKnee.add(rightShoe);
+
+        player.position.set(0, 0, 5);
+        scene.add(player);
+
+        // Direct, stable movement speed
+        const playerSpeed = 6.0;
+
+        // Defensive Jump State
+        let isDefensiveJumping = false;
+        let defJumpTimer = 0;
+        const DEF_JUMP_DURATION = 0.65;
+
+        // --- 5B. AI OPPONENT CHARACTER & STATE ---
+        const aiPlayer = new THREE.Group();
+        const aiJerseyMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.6 }); // Red Jersey
+        const aiShortsMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 });
+        const aiSkinMat = new THREE.MeshStandardMaterial({ color: 0x713f12, roughness: 0.8 });
+
+        const aiPelvis = new THREE.Group();
+        aiPelvis.position.y = 0.85;
+        aiPlayer.add(aiPelvis);
+
+        const aiTorso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.42), aiJerseyMat);
+        aiTorso.position.y = 0.325;
+        aiTorso.castShadow = true;
+        aiPelvis.add(aiTorso);
+
+        const aiHeadGroup = new THREE.Group();
+        aiHeadGroup.position.y = 0.85;
+        aiPelvis.add(aiHeadGroup);
+
+        const aiHead = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), aiSkinMat);
+        aiHead.castShadow = true;
+        aiHeadGroup.add(aiHead);
+
+        const aiLeftShoulder = new THREE.Group();
+        aiLeftShoulder.position.set(-0.44, 0.55, 0);
+        aiPelvis.add(aiLeftShoulder);
+        const aiLeftUpperArm = createBlockyLimb(0.20, 0.32, 0.20, aiJerseyMat);
+        aiLeftShoulder.add(aiLeftUpperArm.group);
+
+        const aiLeftElbow = new THREE.Group();
+        aiLeftElbow.position.y = -0.32;
+        aiLeftUpperArm.group.add(aiLeftElbow);
+        const aiLeftForearm = createBlockyLimb(0.18, 0.30, 0.18, aiSkinMat);
+        aiLeftElbow.add(aiLeftForearm.group);
+
+        const aiRightShoulder = new THREE.Group();
+        aiRightShoulder.position.set(0.44, 0.55, 0);
+        aiPelvis.add(aiRightShoulder);
+        const aiRightUpperArm = createBlockyLimb(0.20, 0.32, 0.20, aiJerseyMat);
+        aiRightShoulder.add(aiRightUpperArm.group);
+
+        const aiRightElbow = new THREE.Group();
+        aiRightElbow.position.y = -0.32;
+        aiRightUpperArm.group.add(aiRightElbow);
+        const aiRightForearm = createBlockyLimb(0.18, 0.30, 0.18, aiSkinMat);
+        aiRightElbow.add(aiRightForearm.group);
+
+        const aiLeftHip = new THREE.Group();
+        aiLeftHip.position.set(-0.20, 0.0, 0);
+        aiPelvis.add(aiLeftHip);
+        const aiLeftThigh = createBlockyLimb(0.22, 0.35, 0.22, aiShortsMat);
+        aiLeftHip.add(aiLeftThigh.group);
+
+        const aiLeftKnee = new THREE.Group();
+        aiLeftKnee.position.y = -0.35;
+        aiLeftThigh.group.add(aiLeftKnee);
+        const aiLeftShin = createBlockyLimb(0.20, 0.35, 0.20, aiSkinMat);
+        aiLeftKnee.add(aiLeftShin.group);
+
+        const aiRightHip = new THREE.Group();
+        aiRightHip.position.set(0.20, 0.0, 0);
+        aiPelvis.add(aiRightHip);
+        const aiRightThigh = createBlockyLimb(0.22, 0.35, 0.22, aiShortsMat);
+        aiRightHip.add(aiRightThigh.group);
+
+        const aiRightKnee = new THREE.Group();
+        aiRightKnee.position.y = -0.35;
+        aiRightThigh.group.add(aiRightKnee);
+        const aiRightShin = createBlockyLimb(0.20, 0.35, 0.20, aiSkinMat);
+        aiRightKnee.add(aiRightShin.group);
+
+        aiPlayer.position.set(0, 0, 1);
+        scene.add(aiPlayer);
+
+        // AI Logic & State
+        const aiSpeed = 4.8;
+        let aiShotTimer = 0;
+        let aiIsShooting = false;
+        let aiShotPhase = 0;
+        let aiStealCooldown = 0;
+        const aiStatusEl = document.getElementById('ai-status');
+
+        // --- 6. BASKETBALL MANAGER & MULTI-BALL SYSTEM ---
+        const ballRadius = 0.24; 
+        const ballMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.6 });
+        const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
+
+        // Array storing all active basketballs
+        const balls = [];
+        let activeBall = null;
+
+        function createNewBall() {
+            const mesh = new THREE.Mesh(ballGeo, ballMat);
+            mesh.castShadow = true;
+            scene.add(mesh);
+
+            const ballData = {
+                mesh: mesh,
+                pos: new THREE.Vector3(),
+                vel: new THREE.Vector3(),
+                state: 'dribbling', // 'dribbling' or 'in_flight'
+                hasScored: false,
+                heldBy: 'player' // 'player' or 'ai'
+            };
+
+            balls.push(ballData);
+            return ballData;
+        }
+
+        // Initialize primary ball
+        activeBall = createNewBall();
+
+        let isRightHand = true;
+        let isCrossover = false;
+        let crossoverType = 'front';
+        let crossoverTimer = 0;
+        let stepBackStartPos = new THREE.Vector3();
+        let stepBackTargetPos = new THREE.Vector3();
+
+        // STAMINA SYSTEM VARIABLES
+        let stamina = 100;
+        const maxStamina = 100;
+        const staminaDrainRateDribble = 5;
+        const staminaDrainRateCrossover = 4;
+        const staminaRegenRateStanding = 40;
+        const staminaBarEl = document.getElementById('stamina-bar');
+        const staminaTextEl = document.getElementById('stamina-text');
+        
+        // Dunk state vars
+        let isChargingDunk = false;
+        let isDunking = false;
+        let dunkTimer = 0;
+        let dunkStartPos = new THREE.Vector3();
+        let dunkTargetPos = new THREE.Vector3();
+        let dunkSuccess = false;
+        let dunkTakeoffDistFt = "0.0";
+        let dunkSpeedFactor = 1.0;
+
+        // Fall & Recovery State
+        let isFalling = false;
+        let fallTimer = 0;
+        const FALL_DURATION = 2.2;
+
+        let netWiggleTimer = 0;
+        const gravity = -16.0;
+
+        function getPlayerDistanceInFeet() {
+            const dx = player.position.x - hoopTargetPos.x;
+            const dz = player.position.z - hoopTargetPos.z;
+            const distUnits = Math.sqrt(dx * dx + dz * dz);
+            return (distUnits * UNITS_TO_FEET).toFixed(1);
+        }
+
+        function triggerStaminaExhaustion() {
+            if (!activeBall || activeBall.state !== 'dribbling') return;
+            showFeedback("EXHAUSTED! LOST CONTROL OF BALL!", "text-red-500 border-red-500/50", "bg-red-950/80");
+            
+            // Fumble ball forwards
+            activeBall.state = 'in_flight';
+            const fumbleAngle = player.rotation.y;
+            activeBall.vel.set(-Math.sin(fumbleAngle) * 3, 3, -Math.cos(fumbleAngle) * 3);
+            activeBall = null;
+        }
+
+        function spawnNewBallInHand() {
+            activeBall = createNewBall();
+            activeBall.heldBy = 'player';
+            showFeedback("NEW BALL SPAWNED!", "text-yellow-400 border-yellow-500/50", "bg-yellow-950/80");
+        }
+
+        // RESET PLAYERS TO TOP OF COURT AFTER SCORE
+        function resetPossessionAfterScore(scoringWinner) {
+            setTimeout(() => {
+                // Clear state
+                balls.forEach(b => scene.remove(b.mesh));
+                balls.length = 0;
+
+                // Reset Positions to top of court
+                player.position.set(0, 0, 5);
+                player.rotation.set(0, 0, 0);
+
+                aiPlayer.position.set(0, 0, 1);
+                aiPlayer.rotation.set(0, 0, 0);
+
+                aiIsShooting = false;
+                aiShotPhase = 0;
+
+                // Give scorer the ball at top
+                activeBall = createNewBall();
+                activeBall.heldBy = scoringWinner;
+
+                stamina = maxStamina;
+                isDunking = false;
+                isChargingDunk = false;
+                isFalling = false;
+                fallTimer = 0;
+                isChargingShot = false;
+                isCrossover = false;
+                isDefensiveJumping = false;
+                defJumpTimer = 0;
+                crossoverTimer = 0;
+                dunkTimer = 0;
+                jumpShotPhase = 0;
+                shotMeterProgress = 0;
+
+                meterContainer.classList.add('hidden');
+                meterContainer.classList.remove('flex');
+
+                showFeedback(
+                    scoringWinner === 'player' ? "PLAYER SCORED! TAKE OUT AT TOP" : "AI SCORED! AI BALL AT TOP",
+                    scoringWinner === 'player' ? "text-green-400 border-green-500/50" : "text-red-400 border-red-500/50",
+                    scoringWinner === 'player' ? "bg-green-950/80" : "bg-red-950/80"
+                );
+            }, 800);
+        }
+
+        function resetPlayerAndBall() {
+            player.position.set(0, 0, 5);
+            player.rotation.set(0, 0, 0);
+
+            aiPlayer.position.set(0, 0, 1);
+            aiIsShooting = false;
+            aiShotPhase = 0;
+
+            balls.forEach(b => scene.remove(b.mesh));
+            balls.length = 0;
+
+            activeBall = createNewBall();
+            activeBall.heldBy = 'player';
+
+            stamina = maxStamina;
+            isDunking = false;
+            isChargingDunk = false;
+            isFalling = false;
+            fallTimer = 0;
+            isChargingShot = false;
+            isCrossover = false;
+            isDefensiveJumping = false;
+            defJumpTimer = 0;
+            crossoverTimer = 0;
+            dunkTimer = 0;
+            jumpShotPhase = 0;
+            shotMeterProgress = 0;
+            
+            // Reset scores on full reset
+            playerScore = 0;
+            aiScore = 0;
+            playerScoreEl.innerText = playerScore;
+            aiScoreEl.innerText = aiScore;
+
+            meterContainer.classList.add('hidden');
+            meterContainer.classList.remove('flex');
+            showFeedback("RESET TO COURT & RETRIEVED BALL", "text-green-400 border-green-500/50", "bg-green-950/80", getPlayerDistanceInFeet());
+        }
+
+        // --- 7. METER & UI CONTROLS ---
+        let shotMeterProgress = 0;
+        let activeMeterType = 'shot'; // 'shot' or 'dunk'
+        let isChargingShot = false;
+        let jumpShotPhase = 0;
+        let shotTakenDistance = "0.0";
+        
+        // Head-to-Head Scores
+        let playerScore = 0;
+        let aiScore = 0;
+
+        let currentGreenMin = 72;
+        let currentGreenMax = 86;
+
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            if (e.code === 'KeyR') resetPlayerAndBall();
+            if (e.code === 'KeyP') spawnNewBallInHand();
+
+            // SPACE BAR: DEFENSE JUMP WHEN PLAYER DOES NOT HAVE BALL
+            if (e.code === 'Space' && (!activeBall || activeBall.heldBy !== 'player' || activeBall.state !== 'dribbling') && !isDefensiveJumping && !isFalling && !isDunking) {
+                isDefensiveJumping = true;
+                defJumpTimer = 0;
+            }
+
+            // Crossovers require stamina
+            if (stamina <= 5 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                showFeedback("TOO TIRED FOR TRICK MOVE!", "text-orange-400 border-orange-500/50", "bg-orange-950/80");
+                return;
+            }
+            
+            // Crossovers driven by Arrow Keys
+            if (e.code === 'ArrowUp' && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isCrossover && !isDunking && !isChargingShot && !isChargingDunk && !isFalling) {
+                isCrossover = true; crossoverType = 'front'; crossoverTimer = 0;
+                stamina = Math.max(0, stamina - staminaDrainRateCrossover);
+            }
+            // Arrow Down = Step-Back Move!
+            if (e.code === 'ArrowDown' && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isCrossover && !isDunking && !isChargingShot && !isChargingDunk && !isFalling) {
+                isCrossover = true; crossoverType = 'stepback'; crossoverTimer = 0;
+                stamina = Math.max(0, stamina - staminaDrainRateCrossover);
+                stepBackStartPos.copy(player.position);
+                
+                // Direction away from hoop
+                const awayDir = new THREE.Vector3().subVectors(player.position, hoopTargetPos);
+                awayDir.y = 0;
+                if (awayDir.lengthSq() < 0.001) awayDir.set(0, 0, 1);
+                awayDir.normalize();
+
+                stepBackTargetPos.copy(player.position).addScaledVector(awayDir, 2.2);
+                stepBackTargetPos.x = Math.max(-roomWidth/2 + 0.8, Math.min(roomWidth/2 - 0.8, stepBackTargetPos.x));
+                stepBackTargetPos.z = Math.max(-roomLength/2 + 1.2, Math.min(roomLength/2 - 1.2, stepBackTargetPos.z));
+            }
+            if (e.code === 'ArrowLeft' && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isCrossover && !isDunking && !isChargingShot && !isChargingDunk && !isFalling) {
+                isCrossover = true; crossoverType = 'legs'; crossoverTimer = 0;
+                stamina = Math.max(0, stamina - staminaDrainRateCrossover);
+            }
+            if (e.code === 'ArrowRight' && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isCrossover && !isDunking && !isChargingShot && !isChargingDunk && !isFalling) {
+                isCrossover = true; crossoverType = 'behind'; crossoverTimer = 0;
+                stamina = Math.max(0, stamina - staminaDrainRateCrossover);
+            }
+
+            // DUNK CHARGE START (KeyQ)
+            if (e.code === 'KeyQ' && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isDunking && !isChargingShot && !isChargingDunk && !isFalling) {
+                isChargingDunk = true;
+                activeMeterType = 'dunk';
+                shotMeterProgress = 0;
+                dunkTakeoffDistFt = getPlayerDistanceInFeet();
+                meterLabel.innerText = "DUNK RELEASE";
+                updateGreenZoneSizeForDunk();
+                meterContainer.classList.remove('hidden');
+                meterContainer.classList.add('flex');
+            }
+        });
+
+        window.addEventListener('keyup', e => {
+            keys[e.code] = false;
+
+            // RELEASE DUNK CHARGE
+            if (e.code === 'KeyQ' && isChargingDunk) {
+                isChargingDunk = false;
+                meterContainer.classList.add('hidden');
+                meterContainer.classList.remove('flex');
+
+                const isGreen = (shotMeterProgress >= currentGreenMin && shotMeterProgress <= currentGreenMax);
+                dunkSuccess = isGreen;
+
+                // Launch Dunk
+                isDunking = true;
+                dunkTimer = 0;
+                dunkStartPos.copy(player.position);
+                dunkTargetPos.set(0, 0, hoopZ + 0.6);
+
+                const distUnits = dunkStartPos.distanceTo(dunkTargetPos);
+                dunkSpeedFactor = Math.max(0.6, 1.8 / Math.max(1, distUnits * 0.4));
+
+                shotMeterProgress = 0;
+            }
+        });
+
+        const meterContainer = document.getElementById('shot-meter-container');
+        const meterBar = document.getElementById('shot-meter-bar');
+        const greenZone = document.getElementById('green-zone');
+        const meterLabel = document.getElementById('meter-label');
+        const feedbackBanner = document.getElementById('feedback-banner');
+        const feedbackText = document.getElementById('feedback-text');
+        const feedbackDistance = document.getElementById('feedback-distance');
+        const liveDistanceEl = document.getElementById('live-distance');
+        const playerScoreEl = document.getElementById('player-score');
+        const aiScoreEl = document.getElementById('ai-score');
+
+        const clock = new THREE.Clock();
+
+        function showFeedback(text, colorClass, bgClass, distFt) {
+            feedbackText.innerText = text;
+            if (distFt) {
+                feedbackDistance.innerText = `Distance: ${distFt} ft`;
+                feedbackDistance.style.display = 'block';
+            } else {
+                feedbackDistance.style.display = 'none';
+            }
+            feedbackBanner.className = `absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none font-black text-2xl tracking-wider px-6 py-2 rounded-lg border shadow-2xl transition-all duration-200 text-center flex flex-col items-center justify-center z-20 ${colorClass} ${bgClass}`;
+            feedbackBanner.classList.remove('hidden');
+            setTimeout(() => feedbackBanner.classList.add('hidden'), 2200);
+        }
+
+        function updateMeterPosition() {
+            const headPos = new THREE.Vector3(player.position.x, player.position.y + 2.0, player.position.z);
+            headPos.project(camera);
+            const x = (headPos.x * .5 + .5) * window.innerWidth;
+            const y = (-(headPos.y * .5) + .5) * window.innerHeight;
+            meterContainer.style.left = `${x}px`;
+            meterContainer.style.top = `${y}px`;
+        }
+
+        function updateGreenZoneSizeForShot() {
+            const dist = player.position.distanceTo(hoopTargetPos);
+            let windowSize = Math.max(3, 20 - (dist - 2) * 1.0);
+            const center = 79;
+            currentGreenMin = center - windowSize / 2;
+            currentGreenMax = center + windowSize / 2;
+
+            greenZone.style.bottom = `${currentGreenMin}%`;
+            greenZone.style.height = `${windowSize}%`;
+        }
+
+        function updateGreenZoneSizeForDunk() {
+            const distFt = parseFloat(getPlayerDistanceInFeet());
+            let windowSize = Math.max(2.5, 28 - (distFt * 1.25));
+            const center = 80;
+            currentGreenMin = center - windowSize / 2;
+            currentGreenMax = center + windowSize / 2;
+
+            greenZone.style.bottom = `${currentGreenMin}%`;
+            greenZone.style.height = `${windowSize}%`;
+        }
+
+        function calculateShotVelocity(startPos, targetPos, greenRelease) {
+            const dx = targetPos.x - startPos.x;
+            const dz = targetPos.z - startPos.z;
+            const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+            let timeInAir = 0.75 + horizontalDist * 0.045;
+
+            let finalTargetX = targetPos.x;
+            let finalTargetZ = targetPos.z;
+
+            if (!greenRelease) {
+                const missOffset = (Math.random() < 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.4);
+                finalTargetX += missOffset;
+                finalTargetZ += (Math.random() < 0.5 ? 0.35 : -0.35);
+            }
+
+            const vx = (finalTargetX - startPos.x) / timeInAir;
+            const vz = (finalTargetZ - startPos.z) / timeInAir;
+            const vy = (targetPos.y - startPos.y - 0.5 * gravity * timeInAir * timeInAir) / timeInAir;
+
+            return new THREE.Vector3(vx, vy, vz);
+        }
+
+        function updateAllBallsPhysics(delta) {
+            const pickupDist = 1.4;
+
+            balls.forEach(b => {
+                if (b.state === 'dribbling') return;
+
+                b.vel.y += gravity * delta;
+                b.pos.addScaledVector(b.vel, delta);
+
+                if (b.pos.y <= ballRadius) {
+                    b.pos.y = ballRadius;
+                    b.vel.y = -b.vel.y * 0.6;
+                    b.vel.x *= 0.82;
+                    b.vel.z *= 0.82;
+                }
+
+                if (!activeBall && player.position.distanceTo(b.pos) < pickupDist && !isDunking && !isFalling && jumpShotPhase === 0 && b.pos.y < 1.4) {
+                    b.state = 'dribbling';
+                    b.hasScored = false;
+                    b.heldBy = 'player';
+                    activeBall = b;
+                } else if (!activeBall && aiPlayer.position.distanceTo(b.pos) < pickupDist && !aiIsShooting && b.pos.y < 1.4) {
+                    b.state = 'dribbling';
+                    b.hasScored = false;
+                    b.heldBy = 'ai';
+                    activeBall = b;
+                }
+
+                const bbZ = hoopZ + 0.08;
+                if (Math.abs(b.pos.z - bbZ) < ballRadius && Math.abs(b.pos.x) < 1.2 && b.pos.y > (TARGET_RIM_Y - 0.55) && b.pos.y < (TARGET_RIM_Y + 0.95)) {
+                    b.pos.z = bbZ + ballRadius;
+                    b.vel.z = Math.abs(b.vel.z) * 0.65;
+                }
+
+                const horizontalDist = Math.sqrt(Math.pow(b.pos.x - hoopTargetPos.x, 2) + Math.pow(b.pos.z - hoopTargetPos.z, 2));
+                const verticalDist = Math.abs(b.pos.y - hoopTargetPos.y);
+
+                if (horizontalDist < (rimRadius - 0.08) && verticalDist < 0.25 && b.vel.y < 0) {
+                    if (!b.hasScored) {
+                        const shooterPos = b.heldBy === 'ai' ? aiPlayer.position : player.position;
+                        const isThree = shooterPos.distanceTo(hoopTargetPos) > 7.0;
+                        const pts = isThree ? 3 : 2;
+                        
+                        if (b.heldBy === 'ai') {
+                            aiScore += pts;
+                            aiScoreEl.innerText = aiScore;
+                            showFeedback(isThree ? "AI SCORED A 3-POINTER!" : "AI SCORED A BASKET!", "text-red-400 border-red-500/50", "bg-red-950/80");
+                            resetPossessionAfterScore('ai');
+                        } else {
+                            playerScore += pts;
+                            playerScoreEl.innerText = playerScore;
+                            showFeedback(isThree ? "3-POINTER MADE!" : "SWISH!", "text-green-400 border-green-500/50", "bg-green-950/80", shotTakenDistance);
+                            resetPossessionAfterScore('player');
+                        }
+                        
+                        b.hasScored = true;
+                        netWiggleTimer = 1.0;
+                    }
+                } else if (horizontalDist < (rimRadius + ballRadius) && horizontalDist > (rimRadius - 0.12) && verticalDist < 0.2) {
+                    const normal = new THREE.Vector3(b.pos.x - hoopTargetPos.x, 0.2, b.pos.z - hoopTargetPos.z).normalize();
+                    b.vel.reflect(normal).multiplyScalar(0.65);
+                }
+
+                b.mesh.position.copy(b.pos);
+            });
+        }
+
+        // --- 8. AI LOGIC FUNCTION ---
+        function updateAIBehavior(delta, time) {
+            aiStealCooldown -= delta;
+
+            const aiHasBall = activeBall && activeBall.heldBy === 'ai' && activeBall.state === 'dribbling';
+            const playerHasBall = activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling';
+
+            if (aiHasBall) {
+                // OFFENSE MODE
+                aiStatusEl.innerText = "ATTACKING HOOP";
+                aiStatusEl.className = "font-bold text-yellow-400 animate-pulse";
+
+                const distToHoop = aiPlayer.position.distanceTo(hoopTargetPos);
+                
+                if (!aiIsShooting) {
+                    // Move towards comfortable shooting range (~4 to 7 units)
+                    const targetDist = 5.5;
+                    const dirToHoop = new THREE.Vector3().subVectors(hoopTargetPos, aiPlayer.position);
+                    dirToHoop.y = 0;
+                    
+                    if (distToHoop > targetDist + 0.5) {
+                        dirToHoop.normalize();
+                        aiPlayer.position.addScaledVector(dirToHoop, aiSpeed * delta);
+                        
+                        // Dribble animation
+                        aiPlayer.position.y = Math.abs(Math.sin(time * 10)) * 0.05;
+                        aiLeftHip.rotation.x = Math.sin(time * 10) * 0.4;
+                        aiRightHip.rotation.x = -Math.sin(time * 10) * 0.4;
+                    } else {
+                        // In position -> Trigger Jump Shot
+                        aiIsShooting = true;
+                        aiShotTimer = 0;
+                        aiShotPhase = 0;
+                    }
+
+                    aiPlayer.lookAt(hoopTargetPos.x, aiPlayer.position.y, hoopTargetPos.z);
+
+                    // Ball attached to AI right hand
+                    activeBall.pos.set(aiPlayer.position.x + 0.4, 0.25 + Math.abs(Math.sin(time * 12)) * 0.4, aiPlayer.position.z - 0.2);
+                    activeBall.mesh.position.copy(activeBall.pos);
+                } else {
+                    // Executing Shot
+                    aiShotTimer += delta;
+                    aiShotPhase = Math.min(1.0, aiShotTimer * 2.5);
+
+                    aiPlayer.position.y = Math.sin(aiShotPhase * Math.PI) * 0.6;
+                    aiRightShoulder.rotation.x = -Math.PI * 0.7 * aiShotPhase;
+
+                    activeBall.pos.set(aiPlayer.position.x, aiPlayer.position.y + 2.0, aiPlayer.position.z - 0.2);
+                    activeBall.mesh.position.copy(activeBall.pos);
+
+                    if (aiShotPhase >= 0.9 && activeBall.state === 'dribbling') {
+                        activeBall.state = 'in_flight';
+
+                        // CHECK USER DEFENSIVE JUMP / CONTEST BLOCK
+                        let makeChance = 0.65;
+                        const distUserToAI = player.position.distanceTo(aiPlayer.position);
+
+                        if (isDefensiveJumping && distUserToAI < 2.2) {
+                            if (distUserToAI < 1.4 && player.position.y > 0.4) {
+                                // COMPLETE BLOCK / SHOT REJECTION
+                                makeChance = 0.0;
+                                showFeedback("BLOCKED BY PLAYER!", "text-cyan-400 border-cyan-500/50", "bg-cyan-950/80");
+                                activeBall.vel = new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 3, 5 + Math.random() * 4);
+                            } else {
+                                // HEAVY CONTEST (Reduces AI percentage greatly)
+                                makeChance = 0.15;
+                                showFeedback("HEAVY DEFENSIVE CONTEST!", "text-cyan-400 border-cyan-500/50", "bg-cyan-950/80");
+                                activeBall.vel = calculateShotVelocity(activeBall.pos, hoopTargetPos, Math.random() < makeChance);
+                            }
+                        } else {
+                            activeBall.vel = calculateShotVelocity(activeBall.pos, hoopTargetPos, Math.random() < makeChance);
+                        }
+
+                        activeBall = null;
+                        aiIsShooting = false;
+                        aiShotPhase = 0;
+                    }
+                }
+            } else if (playerHasBall) {
+                // DEFENSE MODE
+                aiStatusEl.innerText = "DEFENDING";
+                aiStatusEl.className = "font-bold text-red-400";
+
+                // Position between Player and Hoop
+                const idealDefPos = new THREE.Vector3().subVectors(player.position, hoopTargetPos).normalize().multiplyScalar(1.5).add(player.position);
+                idealDefPos.y = 0;
+
+                const moveDir = new THREE.Vector3().subVectors(idealDefPos, aiPlayer.position);
+                moveDir.y = 0;
+
+                if (moveDir.lengthSq() > 0.1) {
+                    moveDir.normalize();
+                    aiPlayer.position.addScaledVector(moveDir, aiSpeed * 0.9 * delta);
+
+                    // Defensive shuffle animation
+                    aiPlayer.position.y = Math.abs(Math.sin(time * 12)) * 0.03;
+                    aiLeftHip.rotation.z = Math.sin(time * 12) * 0.2;
+                    aiRightHip.rotation.z = -Math.sin(time * 12) * 0.2;
+                } else {
+                    aiLeftHip.rotation.z = 0;
+                    aiRightHip.rotation.z = 0;
+                }
+
+                aiPlayer.lookAt(player.position.x, aiPlayer.position.y, player.position.z);
+
+                // AI Steal / Contest logic
+                const distToPlayer = aiPlayer.position.distanceTo(player.position);
+                if (distToPlayer < 1.3 && aiStealCooldown <= 0 && !isCrossover && !isDunking && jumpShotPhase === 0) {
+                    aiStealCooldown = 4.0; // Try steal every 4 sec
+                    
+                    if (Math.random() < 0.35) { // 35% Steal Success Chance
+                        showFeedback("AI STOLE THE BALL!", "text-red-500 border-red-500/50", "bg-red-950/80");
+                        activeBall.heldBy = 'ai';
+                    } else {
+                        showFeedback("AI CONTESTING!", "text-yellow-400 border-yellow-500/50", "bg-yellow-950/80");
+                    }
+                }
+            } else {
+                // LOOSE BALL REBOUND MODE
+                aiStatusEl.innerText = "CHASING BALL";
+                aiStatusEl.className = "font-bold text-orange-400";
+
+                const looseBall = balls.find(b => b.state === 'in_flight' || (!activeBall && b.pos.y < 1.5));
+                if (looseBall) {
+                    const chaseDir = new THREE.Vector3().subVectors(looseBall.pos, aiPlayer.position);
+                    chaseDir.y = 0;
+                    if (chaseDir.lengthSq() > 0.1) {
+                        chaseDir.normalize();
+                        aiPlayer.position.addScaledVector(chaseDir, aiSpeed * delta);
+                        aiPlayer.lookAt(looseBall.pos.x, aiPlayer.position.y, looseBall.pos.z);
+                    }
+                }
+            }
+        }
+
+        // --- 9. ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            const currentDistFt = getPlayerDistanceInFeet();
+            liveDistanceEl.innerText = `${currentDistFt} FT`;
+
+            cars.forEach(car => {
+                const u = car.userData;
+                car.position[u.axis] += u.speed * u.dir * delta;
+                if (car.position[u.axis] > u.limitMax) car.position[u.axis] = u.limitMin;
+                if (car.position[u.axis] < u.limitMin) car.position[u.axis] = u.limitMax;
+            });
+
+            spectators.forEach(spec => {
+                spec.position.y = Math.sin(time * 3 + spec.userData.animOffset) * 0.05;
+                spec.rotation.y += Math.sin(time * 2 + spec.userData.animOffset) * 0.005;
+            });
+
+            if (netWiggleTimer > 0) {
+                netWiggleTimer -= delta * 2.5;
+                const swishVal = Math.sin(netWiggleTimer * 20) * netWiggleTimer * 0.15;
+                netMesh.scale.set(1 + swishVal, 1 - Math.abs(swishVal), 1 + swishVal);
+            } else {
+                netMesh.scale.set(1, 1, 1);
+            }
+
+            // STABLE, DIRECT WASD MOVEMENT
+            const moveInput = new THREE.Vector2(0, 0);
+
+            if (!isDunking && !isChargingShot && !isChargingDunk && !isFalling && jumpShotPhase === 0) {
+                if (keys['KeyW']) moveInput.y -= 1;
+                if (keys['KeyS']) moveInput.y += 1;
+                if (keys['KeyA']) moveInput.x -= 1;
+                if (keys['KeyD']) moveInput.x += 1;
+
+                if (moveInput.lengthSq() > 0) {
+                    moveInput.normalize();
+                    player.position.x += moveInput.x * playerSpeed * delta;
+                    player.position.z += moveInput.y * playerSpeed * delta;
+                }
+
+                // Boundary bounds
+                player.position.x = Math.max(-roomWidth/2 + 0.8, Math.min(roomWidth/2 - 0.8, player.position.x));
+                player.position.z = Math.max(-roomLength/2 + 1.2, Math.min(roomLength/2 - 1.2, player.position.z));
+
+                player.lookAt(hoopTargetPos.x, player.position.y, hoopTargetPos.z);
+            }
+
+            const isMoving = moveInput.lengthSq() > 0;
+            const isDribblingActive = activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling';
+
+            // STAMINA MANAGEMENT & REGEN LOGIC
+            if (isDribblingActive && (isMoving || isCrossover)) {
+                stamina = Math.max(0, stamina - staminaDrainRateDribble * delta);
+                if (stamina <= 0) triggerStaminaExhaustion();
+            } else {
+                stamina = Math.min(maxStamina, stamina + staminaRegenRateStanding * delta);
+            }
+
+            staminaBarEl.style.width = `${stamina}%`;
+            staminaTextEl.innerText = `${Math.round(stamina)}%`;
+            if (stamina < 25) {
+                staminaBarEl.className = "h-full rounded-full transition-all duration-75 bg-red-500 animate-pulse";
+                staminaTextEl.className = "text-red-400 font-black";
+            } else if (stamina < 55) {
+                staminaBarEl.className = "h-full rounded-full transition-all duration-75 bg-yellow-400";
+                staminaTextEl.className = "text-yellow-400";
+            } else {
+                staminaBarEl.className = "h-full rounded-full transition-all duration-75 bg-cyan-400";
+                staminaTextEl.className = "text-cyan-400";
+            }
+
+            // RESET JOINTS TO BASE POSITIONS
+            if (!isFalling) {
+                leftShoulder.rotation.set(0, 0, 0);
+                rightShoulder.rotation.set(0, 0, 0);
+                leftElbow.rotation.set(0, 0, 0);
+                rightElbow.rotation.set(0, 0, 0);
+                leftHip.rotation.set(0, 0, 0);
+                rightHip.rotation.set(0, 0, 0);
+                leftKnee.rotation.set(0, 0, 0);
+                rightKnee.rotation.set(0, 0, 0);
+                pelvis.rotation.set(0, 0, 0);
+            }
+
+            // DEFENSIVE JUMP ANIMATION
+            if (isDefensiveJumping) {
+                defJumpTimer += delta;
+                const defProgress = defJumpTimer / DEF_JUMP_DURATION;
+                
+                if (defProgress <= 1.0) {
+                    player.position.y = Math.sin(defProgress * Math.PI) * 1.1;
+                    leftShoulder.rotation.x = -Math.PI * 0.85;
+                    rightShoulder.rotation.x = -Math.PI * 0.85;
+                } else {
+                    isDefensiveJumping = false;
+                    player.position.y = 0;
+                }
+            }
+
+            // STABLE WALK / RUN ANIMATION
+            if (isMoving && !isDunking && !isChargingShot && !isChargingDunk && !isFalling && !isDefensiveJumping && jumpShotPhase === 0) {
+                const stride = time * 10;
+                const legAngle = Math.sin(stride) * 0.5;
+
+                leftHip.rotation.x = legAngle;
+                rightHip.rotation.x = -legAngle;
+                pelvis.rotation.z = Math.cos(stride * 0.5) * 0.03;
+                player.position.y = Math.abs(Math.sin(stride)) * 0.05;
+            } else if (!isDunking && !isChargingShot && !isChargingDunk && !isFalling && !isDefensiveJumping && jumpShotPhase === 0) {
+                player.position.y = 0;
+            }
+
+            // CROSSOVER ANIMATIONS & STEP-BACK MOVE
+            if (isCrossover && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isDunking && !isFalling) {
+                const animSpeed = crossoverType === 'stepback' ? 4.5 : 6.5;
+                crossoverTimer += delta * animSpeed;
+                const progress = Math.min(crossoverTimer, 1.0);
+
+                const handStartX = isRightHand ? 0.45 : -0.45;
+                const handEndX = isRightHand ? -0.45 : 0.45;
+                const currentX = THREE.MathUtils.lerp(handStartX, handEndX, progress);
+
+                if (crossoverType === 'front') {
+                    pelvis.position.y = 0.70 - Math.sin(progress * Math.PI) * 0.2;
+                    activeBall.pos.set(player.position.x + currentX, 0.25 + Math.sin(progress * Math.PI) * 0.3, player.position.z - 0.2);
+                } else if (crossoverType === 'stepback') {
+                    player.position.lerpVectors(stepBackStartPos, stepBackTargetPos, progress);
+                    pelvis.position.y = 0.85 + Math.sin(progress * Math.PI) * 0.25;
+                    pelvis.rotation.x = -0.25 * Math.sin(progress * Math.PI);
+                    activeBall.pos.set(player.position.x + handStartX, 0.3 + Math.abs(Math.sin(progress * Math.PI * 2)) * 0.4, player.position.z - 0.2);
+                } else if (crossoverType === 'legs') {
+                    pelvis.position.y = 0.65 - Math.sin(progress * Math.PI) * 0.25;
+                    leftHip.rotation.x = 0.6;
+                    rightHip.rotation.x = -0.6;
+                    activeBall.pos.set(player.position.x + currentX, 0.22 + Math.sin(progress * Math.PI) * 0.2, player.position.z);
+                } else if (crossoverType === 'behind') {
+                    pelvis.position.y = 0.70 - Math.sin(progress * Math.PI) * 0.15;
+                    rightShoulder.rotation.x = -0.5;
+                    leftShoulder.rotation.x = -0.5;
+                    activeBall.pos.set(player.position.x + currentX, 0.25 + Math.sin(progress * Math.PI) * 0.25, player.position.z + 0.25);
+                }
+
+                activeBall.mesh.position.copy(activeBall.pos);
+
+                if (crossoverTimer >= 1.0) {
+                    isCrossover = false;
+                    if (crossoverType !== 'stepback') isRightHand = !isRightHand;
+                    pelvis.position.y = 0.85;
+                    pelvis.rotation.x = 0;
+                }
+            } else if (activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isDunking && !isChargingShot && !isChargingDunk && !isFalling && jumpShotPhase === 0) {
+                const handOffset = isRightHand ? 0.45 : -0.45;
+                const bounceFreq = isMoving ? 14 : 10;
+                activeBall.pos.set(player.position.x + handOffset, 0.25 + Math.abs(Math.sin(time * bounceFreq)) * 0.45, player.position.z - 0.2);
+                activeBall.mesh.position.copy(activeBall.pos);
+
+                if (isRightHand) {
+                    rightShoulder.rotation.x = -0.4 + Math.sin(time * bounceFreq) * 0.2;
+                    rightElbow.rotation.x = -0.3;
+                } else {
+                    leftShoulder.rotation.x = -0.4 + Math.sin(time * bounceFreq) * 0.2;
+                    leftElbow.rotation.x = -0.3;
+                }
+            }
+
+            // CHARGE JUMP SHOT (SPACE - ONLY WITH BALL)
+            if (keys['Space'] && activeBall && activeBall.heldBy === 'player' && activeBall.state === 'dribbling' && !isDunking && !isChargingDunk && !isFalling) {
+                if (!isChargingShot) {
+                    isChargingShot = true;
+                    activeMeterType = 'shot';
+                    shotMeterProgress = 0;
+                    jumpShotPhase = 0.1;
+                    shotTakenDistance = getPlayerDistanceInFeet();
+                    meterLabel.innerText = "SHOT RELEASE";
+                    updateGreenZoneSizeForShot();
+                    meterContainer.classList.remove('hidden');
+                    meterContainer.classList.add('flex');
+                }
+            }
+
+            if (isChargingShot || isChargingDunk) {
+                shotMeterProgress += delta * 210;
+                if (shotMeterProgress > 100) shotMeterProgress = 100;
+                meterBar.style.height = `${shotMeterProgress}%`;
+            }
+
+            if (isChargingShot && activeBall) {
+                jumpShotPhase = THREE.MathUtils.lerp(jumpShotPhase, 1.0, delta * 16);
+
+                player.position.y = THREE.MathUtils.lerp(0, 0.75, jumpShotPhase);
+                rightShoulder.rotation.x = THREE.MathUtils.lerp(0, -2.6, jumpShotPhase);
+                rightElbow.rotation.x = THREE.MathUtils.lerp(0, -1.2, jumpShotPhase);
+                leftShoulder.rotation.x = THREE.MathUtils.lerp(0, -2.2, jumpShotPhase);
+
+                activeBall.pos.set(player.position.x, player.position.y + 2.1, player.position.z - 0.2);
+                activeBall.mesh.position.copy(activeBall.pos);
+            }
+
+            // RELEASE JUMP SHOT
+            if (!keys['Space'] && isChargingShot) {
+                isChargingShot = false;
+                meterContainer.classList.add('hidden');
+                meterContainer.classList.remove('flex');
+
+                if (activeBall) {
+                    activeBall.state = 'in_flight';
+                    const isGreen = (shotMeterProgress >= currentGreenMin && shotMeterProgress <= currentGreenMax);
+                    
+                    if (isGreen) {
+                        showFeedback("EXCELLENT RELEASE! (GREEN)", "text-green-400 border-green-500/50", "bg-green-950/80", shotTakenDistance);
+                    } else if (shotMeterProgress > currentGreenMax) {
+                        showFeedback("SLIGHTLY LATE!", "text-yellow-400 border-yellow-500/50", "bg-yellow-950/80", shotTakenDistance);
+                    } else {
+                        showFeedback("SLIGHTLY EARLY!", "text-yellow-400 border-yellow-500/50", "bg-yellow-950/80", shotTakenDistance);
+                    }
+
+                    activeBall.vel = calculateShotVelocity(activeBall.pos, hoopTargetPos, isGreen);
+                    activeBall = null;
+                }
+
+                shotMeterProgress = 0;
+            }
+
+            if (!isChargingShot && jumpShotPhase > 0) {
+                jumpShotPhase = THREE.MathUtils.lerp(jumpShotPhase, 0, delta * 10);
+                player.position.y = THREE.MathUtils.lerp(0, 0.75, jumpShotPhase);
+                rightShoulder.rotation.x = THREE.MathUtils.lerp(-0.4, -2.8, jumpShotPhase);
+                if (jumpShotPhase < 0.05) jumpShotPhase = 0;
+            }
+
+            // DUNK EXECUTION & MISS PHYSICS
+            if (isDunking) {
+                dunkTimer += delta * 1.6 * dunkSpeedFactor;
+                const progress = Math.min(1.0, dunkTimer);
+
+                player.position.lerpVectors(dunkStartPos, dunkTargetPos, progress);
+                
+                const jumpHeight = (TARGET_RIM_Y - 0.35) + (parseFloat(dunkTakeoffDistFt) * 0.06);
+                player.position.y = Math.sin(progress * Math.PI) * jumpHeight;
+                
+                player.rotation.y = progress * Math.PI * 2;
+
+                const armAngle = progress * Math.PI * 2;
+                rightShoulder.rotation.x = -armAngle;
+
+                if (activeBall && activeBall.state === 'dribbling') {
+                    activeBall.pos.set(
+                        player.position.x + Math.sin(armAngle) * 0.5,
+                        player.position.y + 1.6 + Math.cos(armAngle) * 0.7,
+                        player.position.z - 0.2
+                    );
+                    activeBall.mesh.position.copy(activeBall.pos);
+                }
+
+                if (progress >= 0.78 && activeBall && activeBall.state === 'dribbling') {
+                    if (dunkSuccess) {
+                        activeBall.state = 'in_flight';
+                        activeBall.vel.set(0, -14, -2);
+                        playerScore += 2;
+                        playerScoreEl.innerText = playerScore;
+                        netWiggleTimer = 1.0;
+                        showFeedback("SLAM DUNK MADE!", "text-green-400 border-green-500/50", "bg-green-950/80", dunkTakeoffDistFt);
+                        resetPossessionAfterScore('player');
+                        activeBall = null;
+                    } else {
+                        activeBall.state = 'in_flight';
+                        activeBall.vel.set((Math.random() - 0.5) * 8, 11 + Math.random() * 4, 8 + Math.random() * 6);
+                        showFeedback("MISSED DUNK! WIPEOUT!", "text-red-500 border-red-500/50", "bg-red-950/80");
+                        activeBall = null;
+
+                        isFalling = true;
+                        fallTimer = 0;
+                    }
+                }
+
+                if (progress >= 1.0) {
+                    isDunking = false;
+                    player.rotation.y = 0;
+                    if (!isFalling) player.position.y = 0;
+                    pelvis.position.y = 0.85;
+                }
+            }
+
+            // FALL TO FLOOR & GET BACK UP ANIMATION
+            if (isFalling) {
+                fallTimer += delta;
+                const fProg = fallTimer / FALL_DURATION;
+
+                if (fProg <= 0.4) {
+                    const fallPhase = fProg / 0.4;
+                    player.position.y = THREE.MathUtils.lerp(1.2, 0.2, fallPhase);
+                    player.rotation.x = THREE.MathUtils.lerp(0, -Math.PI / 2, fallPhase);
+                    
+                    leftShoulder.rotation.z = -1.2;
+                    rightShoulder.rotation.z = 1.2;
+                    leftHip.rotation.x = -0.8;
+                    rightHip.rotation.x = -0.8;
+                } else if (fProg <= 0.65) {
+                    player.position.y = 0.15;
+                    player.rotation.x = -Math.PI / 2;
+                } else if (fProg <= 1.0) {
+                    const risePhase = (fProg - 0.65) / 0.35;
+                    player.position.y = THREE.MathUtils.lerp(0.15, 0, risePhase);
+                    player.rotation.x = THREE.MathUtils.lerp(-Math.PI / 2, 0, risePhase);
+                    
+                    leftShoulder.rotation.z = THREE.MathUtils.lerp(-1.2, 0, risePhase);
+                    rightShoulder.rotation.z = THREE.MathUtils.lerp(1.2, 0, risePhase);
+                    leftHip.rotation.x = THREE.MathUtils.lerp(-0.8, 0, risePhase);
+                    rightHip.rotation.x = THREE.MathUtils.lerp(-0.8, 0, risePhase);
+                } else {
+                    isFalling = false;
+                    player.position.y = 0;
+                    player.rotation.x = 0;
+                    player.rotation.y = 0;
+                }
+            }
+
+            // UPDATE AI LOGIC
+            updateAIBehavior(delta, time);
+
+            updateAllBallsPhysics(delta);
+            if (isChargingShot || isChargingDunk) updateMeterPosition();
+
+            // CAMERA FOLLOW PLAYER
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, player.position.x, 0.1);
+            camera.position.z = THREE.MathUtils.lerp(camera.position.z, player.position.z + 10.5, 0.1);
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, player.position.y + 5.5, 0.1);
+            controls.target.set(0, 2.0, hoopZ);
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
